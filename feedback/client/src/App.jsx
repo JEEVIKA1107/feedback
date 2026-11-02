@@ -43,7 +43,8 @@ function App() {
 
     try {
       setSubmitting(true);
-      const response = await axios.post('http://localhost:5000/api/feedback', feedback);
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+      const response = await axios.post(`${API_BASE_URL}/api/feedback`, feedback);
 
       // Display success message and clear the form
       setMessage(response.data.message || 'Feedback submitted successfully!');

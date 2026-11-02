@@ -11,6 +11,43 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/feedba
 app.use(cors());
 app.use(express.json());
 
+// Database connection helper supporting both standalone server and serverless functions
+let isConnecting = null;
+
+const connectDB = async () => {
+  if (mongoose.connection.readyState >= 1) {
+    return;
+  }
+  if (!isConnecting) {
+    isConnecting = mongoose.connect(MONGODB_URI)
+      .then((m) => {
+        console.log(`Connected to MongoDB successfully at: ${MONGODB_URI.includes('@') ? 'MongoDB Atlas' : MONGODB_URI}`);
+        return m;
+      })
+      .catch((err) => {
+        console.error('MongoDB connection error:', err.message);
+        throw err;
+      })
+      .finally(() => {
+        isConnecting = null;
+      });
+  }
+  return isConnecting;
+};
+
+// Middleware to ensure database is connected before handling API requests
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    return res.status(500).json({
+      message: 'Failed to connect to the database. Please check MONGODB_URI configuration.',
+      error: err.message
+    });
+  }
+});
+
 // Feedback Schema & Model
 const feedbackSchema = new mongoose.Schema({
   q1: {
@@ -47,7 +84,7 @@ const feedbackSchema = new mongoose.Schema({
 const Feedback = mongoose.model('Feedback', feedbackSchema);
 
 // API Endpoint 1: Submit feedback
-app.post('/api/feedback', async (req, res) => {
+app.post(['/api/feedback', '/feedback'], async (req, res) => {
   try {
     const { q1, q2, q3, q4, q5 } = req.body;
 
@@ -87,7 +124,7 @@ app.post('/api/feedback', async (req, res) => {
 });
 
 // API Endpoint 2: Retrieve all feedback
-app.get('/api/getfeedback', async (req, res) => {
+app.get(['/api/getfeedback', '/getfeedback'], async (req, res) => {
   try {
     const feedbacks = await Feedback.find().sort({ submittedAt: -1 });
     return res.status(200).json(feedbacks);
@@ -100,15 +137,19 @@ app.get('/api/getfeedback', async (req, res) => {
   }
 });
 
-// Connect to MongoDB and start listening only on success
-mongoose.connect(MONGODB_URI)
-  .then(() => {
-    console.log(`Connected to MongoDB successfully at: ${MONGODB_URI}`);
-    app.listen(PORT, () => {
-      console.log(`Server is running and listening on port ${PORT}`);
+// Start listening if executed directly (e.g. node server.js or npm start)
+if (require.main === module) {
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`Server is running and listening on port ${PORT}`);
+      });
+    })
+    .catch((err) => {
+      console.error('Failed to start server:', err.message);
+      process.exit(1);
     });
-  })
-  .catch((err) => {
-    console.error('MongoDB connection error:', err.message);
-    process.exit(1);
-  });
+}
+
+// Export for serverless environments (e.g. Vercel)
+module.exports = app;

@@ -13,7 +13,8 @@ export function GetAllDAta() {
       try {
         setLoading(true);
         setError(null);
-        const response = await axios.get('http://localhost:5000/api/getfeedback');
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+        const response = await axios.get(`${API_BASE_URL}/api/getfeedback`);
         setFeedbacks(Array.isArray(response.data) ? response.data : []);
       } catch (err) {
         if (err.response && err.response.data && err.response.data.message) {
